@@ -21,7 +21,7 @@
 A high-performance, real-time perception Engine built from scratch in PyTorch for autonomous driving applications. By utilizing a shared CSPDarknet backbone, SPPF block, and decoupled task heads, the architecture simultaneously performs object detection and drivable area segmentation on the BDD100K dataset. The system is engineered strictly for edge deployment, prioritizing low latency and minimal VRAM consumption without relying on heavy, pre-packaged frameworks.
 
 <div align="center">
-  <video src="https://github.com/Asmit159/Panoptic-Perception-Engine/blob/main/panoptic_60s_highlight.mp4" autoplay loop muted playsinline width="100%"></video>
+  <video src="https://raw.githubusercontent.com/Asmit159/Panoptic-Perception-Engine/main/panoptic_60s_highlight.mp4" autoplay loop muted playsinline width="100%"></video>
 </div>
 
 ---
