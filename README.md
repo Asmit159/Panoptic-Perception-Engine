@@ -22,11 +22,10 @@ A high-performance, real-time perception Engine built from scratch in PyTorch fo
 
 
 <div align="center">
-  <video src="
-https://github.com/user-attachments/assets/ce63f7f4-e550-4422-990a-41fca6893cf9" autoplay loop muted playsinline width="100%"></video>
+  <video src="https://github.com/user-attachments/assets/ce63f7f4-e550-4422-990a-41fca6893cf9" autoplay loop muted playsinline width="100%"></video>
 </div>
 
-
+> *Original dashcam footage credited to [Dashcam NYC](https://www.youtube.com/watch?v=KntRghSj_UQ). Processed for machine learning demonstration purposes.*
 
 ---
 
