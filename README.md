@@ -46,7 +46,7 @@ graph TD
     B --> C("SPPF Block<br>Spatial Pyramid Pooling - Fast")
     C --> D{"Feature Pyramid Network<br>Multi-Scale Aggregation"}
 
-    subgraph Decoupled Heads
+    subgraph Decoupled_Heads [Decoupled Heads]
         D --> E["YOLO-Style Detection Head<br>Strides: 8, 16, 32"]
         D --> F["ASPP Segmentation Head<br>Atrous Spatial Pyramid Pooling"]
     end
@@ -62,7 +62,7 @@ graph TD
     class A,G,H coralHighlight;
     class B,C,D darkBlock;
     class E,F tealBlock;
-    class Decoupled Heads container;
+    class Decoupled_Heads container;
 
 ```
 
