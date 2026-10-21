@@ -1,178 +1,121 @@
-# Panoptic Perception Engine for Autonomous Navigation
+<div align="center">
+    
+# Panoptic Perception
+![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![Python 3.10+](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![CUDA](https://img.shields.io/badge/CUDA-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
+![Albumentations](https://img.shields.io/badge/Albumentations-8A2BE2?style=for-the-badge)
+![License: AGPL 3](https://img.shields.io/badge/License-AGPL_3-blue.svg?style=for-the-badge)
+![Computer Vision](https://img.shields.io/badge/Computer_Vision-FF9E0F?style=for-the-badge)
+![Autonomous Driving](https://img.shields.io/badge/Autonomous_Driving-00A98F?style=for-the-badge)
+![Edge AI](https://img.shields.io/badge/Edge_AI-111111?style=for-the-badge)
+![Torchvision](https://img.shields.io/badge/Torchvision-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![Dataset: BDD100K](https://img.shields.io/badge/Dataset-BDD100K-8A2BE2?style=for-the-badge)
+![TensorRT](https://img.shields.io/badge/TensorRT-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
+![NVIDIA Jetson](https://img.shields.io/badge/NVIDIA_Jetson-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
 
-A real-time, Multi-Task Learning (MTL) vision system engineered specifically for autonomous vehicle edge-deployment. This engine utilizes a shared ResNet backbone and a Path Aggregation Network (PANet) to simultaneously power object detection (YOLO) and semantic segmentation (U-Net).
+</div>
 
-Standard autonomous perception pipelines often run decoupled, latency-heavy networks side-by-side, which doubles the memory footprint and degrades inference framerates. This architecture instead processes a single forward pass to understand both discrete obstacles (vehicles, pedestrians) and continuous environments (drivable areas). A deterministic spatial routing algorithm then maps these tensor outputs together to calculate real-time surface collision risks and trigger zero-latency brake alerts.
+A high-performance, real-time perception Engine built from scratch in PyTorch for autonomous driving applications. By utilizing a shared CSPDarknet backbone, SPPF block, and decoupled task heads, the architecture simultaneously performs object detection and drivable area segmentation on the BDD100K dataset. The system is engineered strictly for edge deployment, prioritizing low latency and minimal VRAM consumption without relying on heavy, pre-packaged frameworks.
 
-## Table of Contents
-
-* [Systems Architecture](https://www.google.com/search?q=%23systems-architecture)
-* [Handling Multi-Task Loss](https://www.google.com/search?q=%23handling-multi-task-loss)
-* [The Collision Tracker](https://www.google.com/search?q=%23the-collision-tracker)
-* [Production Training Infrastructure](https://www.google.com/search?q=%23production-training-infrastructure)
-* [Performance Metrics & Benchmarking](https://www.google.com/search?q=%23performance-metrics--benchmarking)
-* [Installation & Quick Start](https://www.google.com/search?q=%23installation--quick-start)
+<div align="center">
+  <video src="https://github.com/Asmit159/Panoptic-Perception-Engine/blob/main/panoptic_60s_highlight.mp4" autoplay loop muted playsinline width="100%"></video>
+</div>
 
 ---
 
-## Systems Architecture
+## System Overview
+Standard multi-task models often deploy parallel networks that duplicate feature extraction, leading to massive memory overhead and latency spikes. This engine resolves that bottleneck by processing the spatial environment through a single optimized backbone before branching into specialized heads. 
 
-This system was built with strict space-complexity constraints in mind, sacrificing brute-force API reliance for elegant, mathematically sound tensor routing.
+To guarantee real-time throughput and memory efficiency on edge hardware (e.g., NVIDIA Jetson architectures), the system implements several low-level optimizations:
+
+* **Mixed Precision Operations:** Native `bfloat16` precision across forward passes and loss calculations prevents NaN gradient overflow and accelerates training.
+* **Vectorized Post-Processing:** Hand-written, vectorized implementations for YOLO bounding box decoding, NMS handling, and IoU matching eliminate Python loop bottlenecks.
+* **In-Memory Caching:** Custom dataloader pipeline caches 10,000+ BDD100K labels directly into system RAM to eliminate storage I/O latency during epochs.
+
+---
+
+## Neural Architecture
+The network utilizes a shared feature extraction pipeline that feeds into specialized, decoupled heads for distinct panoptic tasks.
 
 ```mermaid
-graph LR
-    %% Styling Profile
-    classDef core fill:#2c3e50,color:#fff,stroke:#bdc3c7,stroke-width:1px;
-    classDef fpn fill:#8e44ad,color:#fff,stroke:#9b59b6,stroke-width:1px;
-    classDef pan fill:#d35400,color:#fff,stroke:#e67e22,stroke-width:1px;
-    classDef head fill:#2980b9,color:#fff,stroke:#3498db,stroke-width:1px;
-    classDef out fill:#27ae60,color:#fff,stroke:#2ecc71,stroke-width:1px;
+graph TD
+    A["Input Tensor<br>640x384 RGB"] --> B("CSPDarknet Backbone<br>Spatial & Semantic Extraction")
+    B --> C("SPPF Block<br>Spatial Pyramid Pooling - Fast")
+    C --> D{"Feature Pyramid Network<br>Multi-Scale Aggregation"}
 
-    In(Input 384x640) --> R[ResNet-34]:::core
-    
-    subgraph FPN [Top-Down Pathway]
-        R -->|c4| P4:::fpn
-        R -->|c3| P3:::fpn
-        R -->|c2| P2:::fpn
-        P4 -->|+ upsample| P3
-        P3 -->|+ upsample| P2
+    subgraph Decoupled Heads
+        D --> E["YOLO-Style Detection Head<br>Strides: 8, 16, 32"]
+        D --> F["ASPP Segmentation Head<br>Atrous Spatial Pyramid Pooling"]
     end
 
-    subgraph PANet [Bottom-Up Pathway]
-        P2 --> N2:::pan
-        P3 --> N3:::pan
-        P4 --> N4:::pan
-        N2 -->|+ downsample| N3
-        N3 -->|+ downsample| N4
-    end
+    E --> G["Bounding Boxes & Classes"]
+    F --> H["Drivable Area Mask"]
 
-    P2 --> U[VRAM-Optimized U-Net]:::head
-    N2 & N3 & N4 --> Y[Decoupled YOLO]:::head
-    
-    U --> M(Drivable Mask):::out
-    Y --> B(Temporal BBoxes):::out
-    
-    M & B --> T{O NlogN Tracker}:::core --> A(Zero-Latency Alert):::out
+    classDef coralHighlight fill:#F45B69,stroke:#0B2027,stroke-width:2px,color:#FFFFFF;
+    classDef darkBlock fill:#0B2027,stroke:#70A9A1,stroke-width:2px,color:#F6F1D1;
+    classDef tealBlock fill:#40798C,stroke:#0B2027,stroke-width:1.5px,color:#F6F1D1;
+    classDef container fill:none,stroke:#70A9A1,stroke-width:2px,stroke-dasharray: 4 4;
+
+    class A,G,H coralHighlight;
+    class B,C,D darkBlock;
+    class E,F tealBlock;
+    class Decoupled Heads container;
+
 ```
 
-* **Shared ResNet-34 Backbone:** A single ResNet-34 architecture acts as the core feature extractor, extracting hierarchical multi-scale feature maps (`c2`, `c3`, `c4`) to eliminate redundant low-level computations.
+### Core Components
 
-
-* **FPN & PANet Feature Fusion:** A Top-Down Feature Pyramid Network (FPN) generates high-resolution spatial maps (`P2`, `P3`, `P4`), which are then passed into a Bottom-Up Path Aggregation Network (PANet) utilizing downsample layers stabilized by `BatchNorm2d` and `SiLU` activations.
-
-
-* **Decoupled YOLO Head:** The detection head splits into two distinct convolutional branches—one for predicting bounding box coordinates, and another for class probabilities. To prevent the focal loss from exploding on the first epoch, the classification and objectness biases are initialized with a prior probability of 0.01.
-
-
-* **VRAM-Optimized U-Net:** The segmentation head draws directly from the highest-resolution FPN feature (`P2`) and intentionally omits standard encoder skip-connections. Since the FPN and PANet natively handle top-down and bottom-up feature fusion, re-concatenating those tensors is mathematically redundant and saves a massive amount of peak VRAM.
-
-
-
-## Handling Multi-Task Loss
-
-Getting a single network to balance two completely different tasks without one gradient dominating the optimizer requires a highly decoupled loss objective.
-
-* **Balancing the Gradients:** The U-Net segmentation head is optimized using a combination of Focal Loss and Dice Loss to handle the extreme class imbalance between "drivable road" pixels and the "background".
-
-
-* **Smarter Bounding Boxes:** The YOLO regression branch bypasses standard MSE loss in favor of Complete Intersection over Union (CIoU), which heavily penalizes inaccurate bounding box aspect ratios and offset center coordinates.
-
-
-* **Smooth Convergence:** The `AdamW` optimizer is paired with a `SequentialLR` scheduler, utilizing a 3-epoch linear warmup phase before smoothly transitioning into a `CosineAnnealingLR` decay.
-
-
-
-## The Collision Tracker
-
-Deep learning models output raw tensors; they lack temporal memory. To translate bounding boxes into an actual autonomous driving system, this pipeline relies on a custom spatial collision tracker built with classic computer science algorithms.
-
-* **High-Speed Tracking:** Bypassing heavy tracking libraries, the engine utilizes the Hungarian algorithm (`linear_sum_assignment`) paired with Euclidean centroid distances (`scipy.spatial.distance.cdist`) to track object instances across frames in $O(N \log N)$ time.
-
-
-* **Object Memory:** The algorithm retains a persistence memory of objects that temporarily disappear behind obstacles or drop in confidence, deregistering them only after they are missing for a specified frame threshold.
-
-
-* **Semantic Hazard Filtering:** The collision logic maps the bottom-center coordinate of every tracked discrete object to the continuous U-Net drivable road mask. It actively filters out overhead objects—specifically ignoring traffic lights (class 8) and traffic signs (class 9)—so it only flags hazards that are physically touching the vehicle's path.
-
-
-
-## Production Training Infrastructure
-
-The training infrastructure is engineered to survive 150-epoch endurance runs on preemptible cloud GPUs.
-
-* **Data Augmentation:** Trained on the challenging BDD100K dataset, the dataloader utilizes custom random `ColorJitter` augmentations to force model robustness against varied lighting, weather, and extreme glare conditions.
-
-
-* **Atomic Checkpointing:** Model weights and optimizer states are saved to disk using an atomic replacement method (`os.replace`) to completely prevent file corruption if the cloud session gets interrupted mid-save.
-
-
-* **Mixed Precision Scaling:** The pipeline utilizes PyTorch `autocast` and `GradScaler` to execute the forward pass in `float16`, maximizing GPU batch sizes while preventing VRAM overflow.
-
-
+1. **CSPDarknet Backbone:** Cross Stage Partial network that effectively extracts spatial gradients and semantic features while cutting computational overhead in half compared to standard residual networks.
+2. **SPPF (Spatial Pyramid Pooling - Fast):** Maximizes the receptive field by pooling features at multiple scales, ensuring the network can detect large objects in the immediate foreground and small objects in the distance.
+3. **Feature Pyramid Network (FPN):** Aggregates the multi-scale contextual features from the backbone to feed the task-specific heads.
+4. **Decoupled Heads:**
+* **Detection:** A YOLO-style head utilizing Custom Focal Loss and Non-Maximum Suppression (NMS) to output bounding boxes across three stride levels.
+* **Segmentation:** An ASPP block that processes the aggregated features to decode and project a binary drivable area mask.
 
 ---
 
-## Performance Metrics & Benchmarking
+## Regularization & Training Dynamics
+To prevent structural overfitting, the pipeline introduces advanced regularization protocols:
 
-*(Note: The following metrics were achieved running the built-in profiling script on an NVIDIA T4 GPU)*
+* **Albumentations Pipeline:** Integrated spatial and color transformations including **Mosaic**, **MixUp**, and **Color Jittering**. This forces the model to learn physical object geometry rather than memorizing absolute screen coordinates, completely eliminating spatial hallucinations (e.g., detecting pedestrians in the sky).
+* **Early Stopping Mechanics:** Implemented dynamic validation loss tracking with a patience threshold. This automatically halts the training loop upon plateau, securing the optimal checkpoint and preventing the overfitting.
 
-### 1. Hardware Profiling
+---
 
-| Metric | Measured Value | Operational Impact |
+## Performance Benchmarks & Validation
+Evaluated directly on the BDD100K validation split using an NVIDIA A100 GPU at `bfloat16` precision.
+
+<div align="center">
+    
+| Metric | Current Score |
+| --- | --- |
+| **Segmentation mIoU** | **81.88%** |
+| **Segmentation Pixel Accuracy** | **97.11%** |
+| **Detection F1/mAP** | **0.4283** |
+| **Inference Latency** | **5.05 ms** | 
+| **Throughput** | **198.21 FPS** | 
+| **Peak VRAM Usage** | **2.37 GB** |
+
+<img width="1370" height="1600" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (2)" src="https://github.com/user-attachments/assets/adfe975a-e9b4-4c00-a639-4af3f63a8380" />
+<img width="814" height="286" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (3)" src="https://github.com/user-attachments/assets/8e2b5313-d6ba-4b91-89f8-b2ba356e14d3" />
+<img width="850" height="470" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM" src="https://github.com/user-attachments/assets/d612d502-3845-44b9-aa99-e7f01349e651" />
+<img width="841" height="547" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (1)" src="https://github.com/user-attachments/assets/a550187e-1bb2-4d22-80ae-28667dc6005b" />
+
+</div>
+---
+
+### Industry SOTA vs. Panoptic Engine Comparison
+
+State-of-the-art (SOTA) object detection and segmentation frameworks often prioritize absolute mAP on leaderboards at the cost of operational deployment viability.
+
+| Metric / Feature | Panoptic Engine (This Project) | Industry SOTA (e.g., YOLOv8x, Mask R-CNN) |
 | --- | --- | --- |
-| **Peak VRAM** | **1.18 GB** | Fits comfortably within edge-device memory limits (e.g., Jetson Orin Nano) without causing OOM crashes. |
-| **Inference Latency** | **19.4 ms** | Near-instantaneous tensor processing per frame. |
-| **Engine Throughput** | **51.60 FPS** | Comfortably exceeds the 30 FPS threshold required for real-time collision avoidance. |
-| **Detection Baseline** | **~20% mAP@0.5** | A stable scratch baseline proving multi-task convergence on the highly challenging 70,000-image BDD100K dataset. |
-
-### 2. Custom Engine vs. Industry APIs
-
-If the goal is simply the highest possible metric score on a leaderboard, calling `model = YOLOv8()` is the easy way out. But in the real world, autonomous vehicles don't have unlimited compute. This system intentionally trades brute-force parameter bloat for massive gains in inference speed and memory efficiency.
-
-| Metric | Custom Panoptic Engine | Industry APIs (YOLOv8 + SMP U-Net) | The Engineering Tradeoff |
-| --- | --- | --- | --- |
-| **Model Footprint** | **~21 Million** | ~30+ Million | Sharing a single ResNet-34 backbone drastically compresses the total parameter count. |
-| **Peak VRAM** | **1.18 GB** | 2.50+ GB | Stripping the U-Net skip-connections prevents massive memory spikes during the forward pass. |
-| **Throughput** | **51.60 FPS** | ~15 - 20 FPS | By unifying the architecture, a single forward pass prevents the fatal bottleneck of running two massive APIs sequentially. |
-
+| **Architecture** | Custom CSPDarknet + SPPF + FPN | Deep pre-trained transformers / Heavy CNNs |
+| **Task Execution** | Simultaneous (Shared Backbone) | Often sequential or require multiple isolated models |
+| **Peak Memory Overhead** | **~2.37 GB VRAM** | 8.0 GB to 16.0 GB VRAM |
+| **Inference Latency** | **~5.05 ms** | 15.0 ms to 45.0+ ms |
+| **Throughput** | **~200 FPS** | < 60 FPS (without TensorRT compilation) |
 ---
-
-## 🛠️ Installation & Quick Start
-
-### 1. Clone & Install Dependencies
-
-```bash
-git clone https://github.com/Asmit159/Panoptic-Perception-Engine.git
-cd Panoptic-Perception-Engine
-pip install torch torchvision numpy opencv-python scipy matplotlib tqdm
-
-```
-
-### 2. Live Inference & Tracking
-
-To pass unlabelled test images through the panoptic engine and the spatial collision tracker:
-
-```python
-import torch
-from engine import PanopticPerceptionEngine, run_testing_pipeline
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-# Initialize engine and load atomic weights
-model = PanopticPerceptionEngine().to(device)
-model.load_state_dict(torch.load('checkpoints/panoptic_latest.pth')['model_state_dict'])
-
-# Execute evaluation and tracker pipeline
-run_testing_pipeline(
-    model=model, 
-    test_dir='./data/test_images', 
-    output_dir='./predictions', 
-    device=device,
-    conf_threshold=0.40
-)
-
-```
-
----
-
-**Author:** Asmit Mandal
