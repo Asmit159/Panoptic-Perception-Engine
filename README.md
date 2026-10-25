@@ -14,7 +14,6 @@
 ![Torchvision](https://img.shields.io/badge/Torchvision-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![Dataset: BDD100K](https://img.shields.io/badge/Dataset-BDD100K-8A2BE2?style=for-the-badge)
 ![TensorRT](https://img.shields.io/badge/TensorRT-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
-![NVIDIA Jetson](https://img.shields.io/badge/NVIDIA_Jetson-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
 
 </div>
 
@@ -34,9 +33,9 @@ Standard multi-task models often deploy parallel networks that duplicate feature
 
 To guarantee real-time throughput and memory efficiency on edge hardware (e.g., NVIDIA Jetson architectures), the system implements several low-level optimizations:
 
-* **Mixed Precision Operations:** Native `bfloat16` precision across forward passes and loss calculations prevents NaN gradient overflow and accelerates training.
-* **Vectorized Post-Processing:** Hand-written, vectorized implementations for YOLO bounding box decoding, NMS handling, and IoU matching eliminate Python loop bottlenecks.
-* **In-Memory Caching:** Custom dataloader pipeline caches 10,000+ BDD100K labels directly into system RAM to eliminate storage I/O latency during epochs.
+- **Mixed Precision Operations:** Native `bfloat16` precision across forward passes and loss calculations prevents NaN gradient overflow and accelerates training.
+- **Vectorized Post-Processing:** Hand-written, vectorized implementations for YOLO bounding box decoding, NMS handling, and IoU matching eliminate Python loop bottlenecks.
+- **In-Memory Caching:** Custom dataloader pipeline caches 10,000+ BDD100K labels directly into system RAM to eliminate storage I/O latency during epochs.
 
 ---
 
@@ -67,6 +66,7 @@ graph TD
     class E,F tealBlock;
     class Decoupled_Heads container;
 
+
 ```
 
 ### Core Components
@@ -75,50 +75,50 @@ graph TD
 2. **SPPF (Spatial Pyramid Pooling - Fast):** Maximizes the receptive field by pooling features at multiple scales, ensuring the network can detect large objects in the immediate foreground and small objects in the distance.
 3. **Feature Pyramid Network (FPN):** Aggregates the multi-scale contextual features from the backbone to feed the task-specific heads.
 4. **Decoupled Heads:**
+
 * **Detection:** A YOLO-style head utilizing Custom Focal Loss and Non-Maximum Suppression (NMS) to output bounding boxes across three stride levels.
 * **Segmentation:** An ASPP block that processes the aggregated features to decode and project a binary drivable area mask.
 
 ---
 
 ## Regularization & Training Dynamics
+
 To prevent structural overfitting, the pipeline introduces advanced regularization protocols:
 
-* **Albumentations Pipeline:** Integrated spatial and color transformations including **Mosaic**, **MixUp**, and **Color Jittering**. This forces the model to learn physical object geometry rather than memorizing absolute screen coordinates, completely eliminating spatial hallucinations (e.g., detecting pedestrians in the sky).
-* **Early Stopping Mechanics:** Implemented dynamic validation loss tracking with a patience threshold. This automatically halts the training loop upon plateau, securing the optimal checkpoint and preventing the overfitting.
+* **Two-Phase Curriculum Learning:** The model is first converged on standard data, followed by a second phase injecting spatial/color transforms (Mosaic, MixUp, Albumentations) to break reliance on absolute coordinate positioning.
+* **Spatial Hallucination Mitigation:** By forcing the model to learn physical object geometry rather than memorizing screen locations, the curriculum phase significantly improves generalization and eliminates false positives.
+* **Early Stopping Mechanics:** Implemented dynamic validation loss tracking with a patience threshold. This automatically halts the training loop upon plateau, securing the optimal checkpoint and preventing overfitting.
 
 ---
 
 ## Performance Benchmarks & Validation
+
 Evaluated directly on the BDD100K validation split using an NVIDIA A100 GPU at `bfloat16` precision.
 
-<div align="center">
-    
 | Metric | Current Score |
 | --- | --- |
-| **Segmentation mIoU** | **81.88%** |
-| **Segmentation Pixel Accuracy** | **97.11%** |
+| **Segmentation mIoU** | **82.16%** |
+| **Segmentation Pixel Accuracy** | **97.18%** |
 | **Detection F1/mAP** | **0.4283** |
-| **Inference Latency** | **5.05 ms** | 
-| **Throughput** | **198.21 FPS** | 
-| **Peak VRAM Usage** | **2.37 GB** |
+| **Inference Latency** | **4.92 ms per frame** |
+| **Throughput** | **203.06 FPS** |
+| **Peak VRAM Usage** | **1.46 GB** |
 
-<img width="1370" height="1600" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (2)" src="https://github.com/user-attachments/assets/adfe975a-e9b4-4c00-a639-4af3f63a8380" />
-<img width="814" height="286" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (3)" src="https://github.com/user-attachments/assets/8e2b5313-d6ba-4b91-89f8-b2ba356e14d3" />
-<img width="850" height="470" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM" src="https://github.com/user-attachments/assets/d612d502-3845-44b9-aa99-e7f01349e651" />
-<img width="841" height="547" alt="WhatsApp Image 2026-10-21 at 10 48 48 AM (1)" src="https://github.com/user-attachments/assets/a550187e-1bb2-4d22-80ae-28667dc6005b" />
-
-</div>
 ---
 
-### Industry SOTA vs. Panoptic Engine Comparison
+## Industry SOTA vs. Panoptic Engine Comparison
 
-State-of-the-art (SOTA) object detection and segmentation frameworks often prioritize absolute mAP on leaderboards at the cost of operational deployment viability.
+In autonomous vehicle perception, the goal is maximizing accuracy within a strict computational budget (SWaP: Size, Weight, and Power). While heavyweight state-of-the-art (SOTA) frameworks often prioritize absolute leaderboard mAP, they typically suffer from massive memory overhead and single-digit FPS, rendering them unviable for production edge hardware (e.g., NVIDIA Jetson Nano/Orin).
 
-| Metric / Feature | Panoptic Engine (This Project) | Industry SOTA (e.g., YOLOv8x, Mask R-CNN) |
-| --- | --- | --- |
-| **Architecture** | Custom CSPDarknet + SPPF + FPN | Deep pre-trained transformers / Heavy CNNs |
-| **Task Execution** | Simultaneous (Shared Backbone) | Often sequential or require multiple isolated models |
-| **Peak Memory Overhead** | **~2.37 GB VRAM** | 8.0 GB to 16.0 GB VRAM |
-| **Inference Latency** | **~5.05 ms** | 15.0 ms to 45.0+ ms |
-| **Throughput** | **~200 FPS** | < 60 FPS (without TensorRT compilation) |
+This engine is engineered to hit the **Pareto frontier** of speed, memory, and accuracy. It trades a marginal ~2-4% in absolute accuracy to achieve a **400% to 500% speed multiplier** over standard edge solutions, while consuming a fraction of the VRAM.
+
+| Architecture / Model | Segmentation mIoU | Detection mAP/F1 | Inference Speed (FPS) | Peak VRAM |
+| --- | --- | --- | --- | --- | 
+| **Mask R-CNN** (Heavyweight) | ~83% - 85% | 45% - 48% | 5 - 10 FPS | 8.0 GB+ | 
+| **YOLOP** (Industry Standard Edge) | ~84% | ~44% | ~40 - 50 FPS | ~3.0 GB | 
+| **HybridNets** (E2E SOTA) | ~85% | ~46% | ~30 - 35 FPS | ~4.0 GB |
+| **Panoptic Engine (This Project)** | **82.16%** | **42.83%** | **203 FPS** | **1.46 GB** | 
+
+*(Note: FPS metrics for external baselines are normalized to modern server GPUs to match the testing environment of this project.)*
+
 ---
