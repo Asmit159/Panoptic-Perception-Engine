@@ -89,6 +89,9 @@ To prevent structural overfitting, the pipeline introduces advanced regularizati
 * **Spatial Hallucination Mitigation:** By forcing the model to learn physical object geometry rather than memorizing screen locations, the curriculum phase significantly improves generalization and eliminates false positives.
 * **Early Stopping Mechanics:** Implemented dynamic validation loss tracking with a patience threshold. This automatically halts the training loop upon plateau, securing the optimal checkpoint and preventing overfitting.
 
+<img width="5970" height="2911" alt="best_segmentation_showcase" src="https://github.com/user-attachments/assets/cd5ab342-1b1d-433f-9e95-c8cc1382b8d3" />
+<img width="5970" height="2911" alt="image" src="https://github.com/user-attachments/assets/607dd0c4-f4e2-4aa6-96f4-9a8bdc4e25ff" />
+
 ---
 
 ## Performance Benchmarks & Validation
@@ -104,6 +107,26 @@ Evaluated directly on the BDD100K validation split using an NVIDIA A100 GPU at `
 | **Throughput** | **203.06 FPS** |
 | **Peak VRAM Usage** | **1.46 GB** |
 
+<table>
+  <tr>
+    <td align="center">
+      <img src="https://github.com/user-attachments/assets/7fd479a1-90e4-4308-9826-1e4695520ffc" alt="Baseline Latency Distribution" width="100%" />
+      <br><sub><b>Baseline Latency Distribution</b></sub>
+    </td>
+    <td align="center">
+      <img src="https://github.com/user-attachments/assets/fde3945e-c2d5-47b4-be33-0dc11a9ac614" alt="Augmented Latency Distribution" width="100%" />
+      <br><sub><b>Augmented Latency Distribution</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="https://github.com/user-attachments/assets/e2e530a8-2fca-489f-93c2-5a8ff69d6921" alt="Metric View 1" width="100%" />
+    </td>
+    <td align="center">
+      <img src="https://github.com/user-attachments/assets/628312d7-9d40-4956-a86d-f25b7db5c74b" alt="Metric View 2" width="100%" />
+    </td>
+  </tr>
+</table>
 ---
 
 ## Industry SOTA vs. Panoptic Engine Comparison
