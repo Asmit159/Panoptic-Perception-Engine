@@ -64,7 +64,6 @@ class BDD100KDataset(Dataset):
         else:
             mask = np.zeros((384, 640), dtype=np.float32)
 
-        # Instantly fetch pre-loaded RAM targets instead of hitting the disk
         boxes = self.labels[idx]
 
         img_tensor = torch.from_numpy(img).float().permute(2, 0, 1) / 255.0
